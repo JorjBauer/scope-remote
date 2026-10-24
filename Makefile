@@ -127,6 +127,7 @@ rel-win32-%: pkg-win32-%
 	cd dist && zip -qry "$(abspath $(call REL,win32)).zip" "$(PRODUCT)-win32-$*"
 
 release:
+	sh tools/release.sh check
 	rm -rf dist/release
 	$(MAKE) test dist
 	sh tools/release.sh
