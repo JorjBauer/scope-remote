@@ -97,6 +97,7 @@ dist: $(addprefix rel-,$(RELEASES))
 # This rule comes first so make 3.81 picks it over pkg-% for darwin.
 pkg-darwin-%: node_modules
 	$(PACKAGER) . "$(PRODUCT)" --platform=darwin --arch=$* --extend-info=tools/local-network.plist $(PKG_FLAGS)
+	$(NODE) tools/macho-uuid.js "dist/$(PRODUCT)-darwin-$*/$(PRODUCT).app/Contents/MacOS/$(PRODUCT)" "$(PRODUCT)"
 	codesign --force --deep --sign - "dist/$(PRODUCT)-darwin-$*/$(PRODUCT).app"
 
 pkg-%: node_modules

@@ -111,8 +111,30 @@ const NUMERIC = new Set(['ch1scale', 'ch1offset', 'ch1probe', 'ch2scale', 'ch2of
   'tbscale', 'tboffset', 'triglevel', 'srate']);
 const BOOL = new Set(['ch1disp', 'ch2disp', 'mathdisp']);
 
-export async function poll() {
-  if (!core.connected) return;
+// Everything that changes a setting asks for a poll afterward, so calls pile
+// up. Only one runs at a time; a call made while one is running gets one
+// more pass after it, so it still sees the change it asked about.
+let polling = null;
+let pollAgain = false;
+
+export function poll() {
+  if (!core.connected) return Promise.resolve();
+  if (polling) {
+    pollAgain = true;
+    return polling;
+  }
+  polling = (async () => {
+    do {
+      pollAgain = false;
+      await pollOnce();
+    } while (pollAgain && core.connected);
+  })().finally(() => {
+    polling = null;
+  });
+  return polling;
+}
+
+async function pollOnce() {
   const r = await window.scope.run(POLL_LIST.map((p) => p[1]), { background: true });
   const s = {};
   POLL_LIST.forEach(([k], i) => {

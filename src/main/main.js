@@ -22,6 +22,16 @@ function send(channel, payload) {
 scope.on('state', (up) => send('scope:state', { connected: up, host: scope.host }));
 scope.on('traffic', (t) => send('scope:traffic', t));
 
+// SCOPE_TRACE=1 prints every command and reply, for chasing the real
+// scope's quirks.
+if (process.env.SCOPE_TRACE) {
+  const t0 = Date.now();
+  scope.on('traffic', (t) => {
+    const ms = String(Date.now() - t0).padStart(6);
+    console.error(`${ms} ${t.dir === 'out' ? '>' : '<'} ${t.cmd}${t.dir === 'in' ? `  => ${JSON.stringify(t.text)}` : ''}`);
+  });
+}
+
 // A timed-out reply leaves the stream in an unknown state, so the client
 // hangs up. Dial straight back in so the user only sees a blip.
 scope.on('reconnect', async ({ host, port }) => {
@@ -129,18 +139,19 @@ function registerIpc() {
   ipcMain.handle('scope:status', () => ({ connected: scope.connected, host: scope.host }));
 
   // Run a list of commands in order. Queries (ending in '?') come back in
-  // the results array; plain commands give null.
+  // the results array; plain commands give null. The whole list is queued
+  // at once so it goes out as one run; queuing one command per reply let a
+  // half-second screen grab slip in between every few, and a 25-query poll
+  // took six seconds.
   ipcMain.handle('scope:run', async (_e, cmds, opts = {}) => {
-    const out = [];
+    const pending = [];
     for (const c of cmds) {
       const cmd = String(c).trim();
       if (!cmd) continue;
-      if (/\?(\s|$)/.test(cmd)) out.push(await scope.query(cmd, { urgent: !opts.background }));
-      else {
-        await scope.write(cmd, { urgent: !opts.background, gap: opts.gap });
-        out.push(null);
-      }
+      if (/\?(\s|$)/.test(cmd)) pending.push(scope.query(cmd, { urgent: !opts.background }));
+      else pending.push(scope.write(cmd, { urgent: !opts.background, gap: opts.gap }).then(() => null));
     }
+    const out = await Promise.all(pending);
     if (opts.checkErrors) {
       const errs = [];
       for (let i = 0; i < 20; i++) {

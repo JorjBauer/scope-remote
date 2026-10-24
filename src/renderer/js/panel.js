@@ -305,7 +305,10 @@ export function initPanel(el, actions) {
   });
 }
 
-function toggleRun() {
+async function toggleRun() {
+  // Before the first poll the state is unknown, and guessing "running"
+  // would stop a running scope. Ask.
+  if (!st().run) patchState({ run: await q(':TRIGger:STATus?') });
   const stopped = String(st().run || '').toUpperCase() === 'STOP';
   patchState({ run: stopped ? 'RUN' : 'STOP' });
   simple([stopped ? ':RUN' : ':STOP']);

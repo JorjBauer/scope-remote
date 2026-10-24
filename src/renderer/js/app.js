@@ -208,24 +208,20 @@ async function pollLoop() {
 
 const meas = { 1: {}, 2: {} };
 
+// The real scope takes about 400 ms per measurement it isn't already
+// showing, so a dozen of them is ~5 s. Ask one at a time, so screen grabs
+// get a turn in between, and show each value as it arrives.
 async function pollMeasurements() {
   const s = core.state;
-  const cmds = [];
-  const keys = [];
   for (const n of [1, 2]) {
     if (!s[`ch${n}disp`]) continue;
     for (const item of core.settings.measItems) {
-      cmds.push(`:MEASure:ITEM? ${item},CHANnel${n}`);
-      keys.push([n, item]);
+      if (!core.connected) return;
+      const r = await window.scope.run([`:MEASure:ITEM? ${item},CHANnel${n}`], { background: true });
+      meas[n][item] = parseFloat(r.results[0]);
+      renderMeas();
     }
   }
-  if (!cmds.length) {
-    renderMeas();
-    return;
-  }
-  const r = await window.scope.run(cmds, { background: true });
-  keys.forEach(([n, item], i) => (meas[n][item] = parseFloat(r.results[i])));
-  renderMeas();
 }
 
 function renderMeas() {
@@ -303,7 +299,8 @@ function renderStatus() {
 onChange((what) => {
   if (what === 'state' || what === 'conn') {
     renderStatus();
-    if (what === 'conn') renderMeas();
+    // Which channels are on comes from the state poll; the numbers follow.
+    renderMeas();
   }
   if (what === 'busy') document.body.classList.toggle('busy', core.busy > 0);
 });
