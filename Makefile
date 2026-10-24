@@ -8,6 +8,7 @@
 #   make check      syntax-check every source file
 #   make app        build the app for this computer into dist/
 #   make dist       build every release zip into dist/release/
+#   make release    publish dist/release/ as a GitHub release (see tools/release.sh)
 #   make install    copy the built app into /Applications (macOS)
 #   make clean      remove dist/ and demo settings
 #   make distclean  also remove node_modules/
@@ -27,7 +28,7 @@ SOURCES   := $(shell find src tools test -name '*.js')
 # What `make dist` builds, as platform-arch in Electron's names.
 RELEASES  := darwin-x64 darwin-arm64 win32-x64 linux-x64
 
-.PHONY: all run demo mock test check app dist install clean distclean
+.PHONY: all run demo mock test check app dist release install clean distclean
 
 all: node_modules
 
@@ -124,6 +125,11 @@ rel-win32-%: pkg-win32-%
 	@mkdir -p dist/release
 	rm -f "$(call REL,win32).zip"
 	cd dist && zip -qry "$(abspath $(call REL,win32)).zip" "$(PRODUCT)-win32-$*"
+
+release:
+	rm -rf dist/release
+	$(MAKE) test dist
+	sh tools/release.sh
 
 install: pkg-darwin-$(ARCH)
 	rm -rf "/Applications/Scope Remote.app"
