@@ -236,8 +236,13 @@ function registerIpc() {
 
 function createWindow() {
   const bounds = store.get('bounds', { width: 1500, height: 920 });
+  // A capture run (below) opens without taking focus, so typing in another
+  // app can't land on the panel and press RUN/STOP or AUTO on a real scope.
+  const capture = !!process.env.SCOPE_CAPTURE;
+  if (capture && app.dock) app.dock.hide();
   win = new BrowserWindow({
     ...bounds,
+    show: !capture,
     minWidth: 1100,
     minHeight: 700,
     title: 'Scope Remote',
@@ -260,7 +265,8 @@ function createWindow() {
   // For testing the UI: SCOPE_CAPTURE=out.png saves a picture of the window
   // after SCOPE_CAPTURE_DELAY ms, optionally running SCOPE_CAPTURE_JS in the
   // page first, then quits.
-  if (process.env.SCOPE_CAPTURE) {
+  if (capture) {
+    win.once('ready-to-show', () => win.showInactive());
     win.webContents.once('did-finish-load', async () => {
       const delay = Number(process.env.SCOPE_CAPTURE_DELAY) || 6000;
       await new Promise((r) => setTimeout(r, delay));

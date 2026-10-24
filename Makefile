@@ -84,8 +84,18 @@ check:
 # dist/Scope Remote-<platform>-<arch>/, and rel-<platform>-<arch> zips it
 # into dist/release/ for a GitHub release. Electron for each platform is
 # downloaded (and cached) by the packager, so any host can build them all.
-PKG_FLAGS := --out=dist --overwrite \
-	--ignore='^/dist' --ignore='^/test' --ignore='^/tools' --ignore='^/\.demo-data' --ignore='^/Makefile'
+#
+# The app gets package.json and src/ and nothing else, so a stray or
+# gitignored file in the checkout (notes, a .env) can't end up in a public
+# release. That includes node_modules: the app has no runtime dependencies,
+# and pkg-deps-check stops the build if one is ever added, since it would be
+# left out and the app would fail at launch. Widen the pattern first.
+PKG_FLAGS := --out=dist --overwrite --ignore='^/(?!(src|package\.json)(/|$$))'
+
+.PHONY: pkg-deps-check
+pkg-deps-check:
+	@$(NODE) -e "const d = Object.keys(require('./package.json').dependencies || {}); \
+	  if (d.length) { console.error('package.json has runtime dependencies (' + d.join(', ') + '), but PKG_FLAGS only packages src/ and package.json; widen it'); process.exit(1); }"
 
 app: pkg-$(HOST_OS)-$(ARCH)
 
@@ -96,12 +106,12 @@ dist: $(addprefix rel-,$(RELEASES))
 # won't launch an arm64 binary without some signature, and macOS only asks
 # for Local Network access on behalf of a signed app (see DEV_APP above).
 # This rule comes first so make 3.81 picks it over pkg-% for darwin.
-pkg-darwin-%: node_modules
+pkg-darwin-%: node_modules pkg-deps-check
 	$(PACKAGER) . "$(PRODUCT)" --platform=darwin --arch=$* --extend-info=tools/local-network.plist $(PKG_FLAGS)
 	$(NODE) tools/macho-uuid.js "dist/$(PRODUCT)-darwin-$*/$(PRODUCT).app/Contents/MacOS/$(PRODUCT)" "$(PRODUCT)"
 	codesign --force --deep --sign - "dist/$(PRODUCT)-darwin-$*/$(PRODUCT).app"
 
-pkg-%: node_modules
+pkg-%: node_modules pkg-deps-check
 	$(PACKAGER) . "$(PRODUCT)" --platform=$(word 1,$(subst -, ,$*)) --arch=$(word 2,$(subst -, ,$*)) $(PKG_FLAGS)
 
 # ditto keeps the Mac bundle's symlinks and signature intact, and tar keeps
