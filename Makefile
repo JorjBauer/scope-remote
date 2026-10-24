@@ -6,8 +6,9 @@
 #   make mock       run just the simulated scope (127.0.0.1:$(MOCK_PORT))
 #   make test       run the tests (uses the simulated scope, never a real one)
 #   make check      syntax-check every source file
-#   make app        build "Scope Remote.app" into dist/
-#   make install    copy the built app into /Applications
+#   make app        build the app for this computer into dist/
+#   make dist       build every release zip into dist/release/
+#   make install    copy the built app into /Applications (macOS)
 #   make clean      remove dist/ and demo settings
 #   make distclean  also remove node_modules/
 
@@ -17,10 +18,16 @@ MOCK_PORT ?= 5555
 ELECTRON  := node_modules/.bin/electron
 PACKAGER  := node_modules/.bin/electron-packager
 ARCH      := $(shell uname -m | sed -e 's/x86_64/x64/' -e 's/aarch64/arm64/')
-APP       := dist/Scope Remote-darwin-$(ARCH)/Scope Remote.app
+HOST_OS   := $(shell uname -s | sed -e 's/Darwin/darwin/' -e 's/Linux/linux/' -e 's/MINGW.*/win32/' -e 's/MSYS.*/win32/')
+PRODUCT   := Scope Remote
+VERSION   := $(shell $(NODE) -p "require('./package.json').version")
+APP       := dist/$(PRODUCT)-darwin-$(ARCH)/$(PRODUCT).app
 SOURCES   := $(shell find src tools test -name '*.js')
 
-.PHONY: all run demo mock test check app install clean distclean
+# What `make dist` builds, as platform-arch in Electron's names.
+RELEASES  := darwin-x64 darwin-arm64 win32-x64 linux-x64
+
+.PHONY: all run demo mock test check app dist install clean distclean
 
 all: node_modules
 
@@ -72,13 +79,52 @@ check:
 	@for f in $(SOURCES); do $(NODE) --check "$$f" || exit 1; done
 	@echo "syntax ok"
 
-app: node_modules
-	$(PACKAGER) . "Scope Remote" --platform=darwin --arch=$(ARCH) --out=dist --overwrite \
-		--extend-info=tools/local-network.plist \
-		--ignore='^/dist' --ignore='^/test' --ignore='^/tools' --ignore='^/\.demo-data' --ignore='^/Makefile'
-	codesign --force --deep --sign - "$(APP)"
+# Packaging. pkg-<platform>-<arch> builds one app into
+# dist/Scope Remote-<platform>-<arch>/, and rel-<platform>-<arch> zips it
+# into dist/release/ for a GitHub release. Electron for each platform is
+# downloaded (and cached) by the packager, so any host can build them all.
+PKG_FLAGS := --out=dist --overwrite \
+	--ignore='^/dist' --ignore='^/test' --ignore='^/tools' --ignore='^/\.demo-data' --ignore='^/Makefile'
 
-install: app
+app: pkg-$(HOST_OS)-$(ARCH)
+
+dist: $(addprefix rel-,$(RELEASES))
+
+# None of these are signed with a developer identity. The Macs are signed
+# ad hoc, which is no certificate at all, because an Apple Silicon Mac
+# won't launch an arm64 binary without some signature, and macOS only asks
+# for Local Network access on behalf of a signed app (see DEV_APP above).
+# This rule comes first so make 3.81 picks it over pkg-% for darwin.
+pkg-darwin-%: node_modules
+	$(PACKAGER) . "$(PRODUCT)" --platform=darwin --arch=$* --extend-info=tools/local-network.plist $(PKG_FLAGS)
+	codesign --force --deep --sign - "dist/$(PRODUCT)-darwin-$*/$(PRODUCT).app"
+
+pkg-%: node_modules
+	$(PACKAGER) . "$(PRODUCT)" --platform=$(word 1,$(subst -, ,$*)) --arch=$(word 2,$(subst -, ,$*)) $(PKG_FLAGS)
+
+# ditto keeps the Mac bundle's symlinks and signature intact, and tar keeps
+# the Linux executable bits; Windows gets a plain zip.
+# The pkg- and rel- targets are never real files; this stops make deleting
+# them as intermediates once dist is done.
+.SECONDARY:
+
+REL = dist/release/scope-remote-$(VERSION)-$(1)-$*
+
+rel-darwin-%: pkg-darwin-%
+	@mkdir -p dist/release
+	rm -f "$(call REL,darwin).zip"
+	ditto -c -k --keepParent "dist/$(PRODUCT)-darwin-$*/$(PRODUCT).app" "$(call REL,darwin).zip"
+
+rel-linux-%: pkg-linux-%
+	@mkdir -p dist/release
+	tar -C dist -czf "$(call REL,linux).tar.gz" "$(PRODUCT)-linux-$*"
+
+rel-win32-%: pkg-win32-%
+	@mkdir -p dist/release
+	rm -f "$(call REL,win32).zip"
+	cd dist && zip -qry "$(abspath $(call REL,win32)).zip" "$(PRODUCT)-win32-$*"
+
+install: pkg-darwin-$(ARCH)
 	rm -rf "/Applications/Scope Remote.app"
 	cp -R "$(APP)" /Applications/
 
