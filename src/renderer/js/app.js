@@ -345,6 +345,45 @@ function showFirmware(r) {
   b.title = `This scope: ${r.installed}. Newest on Rigol's site: ${r.latest} (checked ${new Date(r.checked).toLocaleString()}). Click to open Rigol's firmware page.`;
 }
 
+// ---------- app update check ----------
+
+// Ask GitHub whether a newer Scope Remote has been released. Like the
+// firmware check: at most once a day, cached, and only a badge that opens
+// the release page. Automatic checks are for the packaged app only.
+async function checkAppUpdate(manual) {
+  const info = await window.scope.appInfo();
+  if (!manual && (!info.packaged || core.settings.checkUpdates === false)) return;
+  let r = await window.appStore.get('appUpdateCheck', null);
+  const stale = !r || r.installed !== info.version || Date.now() - r.checked > DAY;
+  if (manual || stale) {
+    try {
+      r = await window.scope.checkAppUpdate();
+      await window.appStore.set('appUpdateCheck', r);
+    } catch (e) {
+      if (manual) toast(`Update check failed: ${e.message}`, 'error', 6000);
+      return;
+    }
+  }
+  showAppUpdate(r);
+  if (manual) {
+    toast(r.status === 'newer'
+      ? `Scope Remote ${r.latest} is out; this is ${r.installed}.`
+      : `Up to date: this is ${r.installed}, the newest release is ${r.latest}.`, r.status === 'newer' ? 'info' : 'ok', 7000);
+  }
+}
+
+function showAppUpdate(r) {
+  const b = $('upd');
+  if (!r || r.status !== 'newer') {
+    b.classList.add('hidden');
+    return;
+  }
+  b.classList.remove('hidden');
+  b.textContent = `Scope Remote ${r.latest} available`;
+  b.title = `This is ${r.installed} (checked ${new Date(r.checked).toLocaleString()}). Click to open the release page.`;
+  b.onclick = () => window.scope.openRelease(r.page);
+}
+
 // ---------- settings ----------
 
 async function loadSettings() {
@@ -376,6 +415,7 @@ async function openSettings() {
     },
   }, opts.map(([v, l]) => h('option', { value: v, selected: String(core.settings[key]) === String(v) }, l)));
   const file = await window.appStore.path();
+  const info = await window.scope.appInfo();
   showModal(h('div.modal-body',
     h('h3', 'Settings'),
     fld('My probes are switched to', sel('probe', [['10', '10x (the usual)'], ['1', '1x']]), 'Shortcuts set the scope\'s probe ratio to match.'),
@@ -384,6 +424,9 @@ async function openSettings() {
     fld('Connect automatically at startup', sel('autoConnect', [['true', 'Yes'], ['false', 'No']])),
     fld('Check for firmware updates', sel('checkFirmware', [['true', 'Once a day, after connecting'], ['false', 'Only when I ask']]),
       'Reads Rigol\'s public firmware page (rigolna.com/firmware). The app never installs firmware; updating is done from a USB stick on the scope.'),
+    fld('Check for new versions of this app', sel('checkUpdates', [['true', 'Once a day, at startup'], ['false', 'Only when I ask']]),
+      h('span', `This is Scope Remote ${info.version}. Asks GitHub for the newest release and shows a button to its page if it's newer; it never downloads or installs anything. `,
+        h('a', { href: '#', onclick: (e) => { e.preventDefault(); checkAppUpdate(true); } }, 'Check now'), '.')),
     fld('Port', h('input.num', {
       type: 'text',
       value: core.settings.port || 5555,
@@ -404,7 +447,7 @@ async function openSettings() {
 
 async function main() {
   await loadSettings();
-  for (const k of ['autoConnect', 'checkFirmware']) {
+  for (const k of ['autoConnect', 'checkFirmware', 'checkUpdates']) {
     if (typeof core.settings[k] === 'string') core.settings[k] = core.settings[k] === 'true';
   }
   $('fw').addEventListener('click', () => window.scope.openFirmwarePage());
@@ -445,6 +488,7 @@ async function main() {
   $('host').value = host;
   setConnUi('down');
   if (host && (launchHost || core.settings.autoConnect !== false)) connect();
+  checkAppUpdate(false);
 }
 
 main();

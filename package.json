@@ -1,12 +1,16 @@
 {
   "name": "scope-remote",
   "productName": "Scope Remote",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local remote control and live screen for a Rigol DS1202Z-E, with a drawer of common setups.",
   "main": "src/main/main.js",
   "private": true,
   "author": "Jorj Bauer",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JorjBauer/scope-remote"
+  },
   "scripts": {
     "start": "electron .",
     "test": "node --test test/*.test.js"

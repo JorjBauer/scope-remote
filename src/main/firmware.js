@@ -1,6 +1,7 @@
 // Firmware update check. Rigol North America keeps a table of the newest
 // firmware per product family; the DS1202Z-E is in the "DS1000Z-E" row.
-// This is the app's only trip to the internet, and only reads that page.
+// Besides the app update check (appupdate.js), this is the app's only trip
+// to the internet, and it only reads that page.
 
 'use strict';
 

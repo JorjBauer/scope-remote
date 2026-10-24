@@ -10,6 +10,7 @@ const { Scpi } = require('./scpi');
 const store = require('./store');
 const { checkFirmware, FIRMWARE_PAGE } = require('./firmware');
 const { findScope } = require('./discover');
+const { checkAppUpdate, isReleasePage } = require('./appupdate');
 
 const scope = new Scpi();
 let win = null;
@@ -212,8 +213,17 @@ function registerIpc() {
   });
 
   ipcMain.handle('fw:check', (_e, fw) => checkFirmware(fw));
-  // Only ever opens Rigol's firmware page; nothing else leaves the app.
+  // Only ever opens Rigol's firmware page or one of this app's GitHub
+  // release pages; nothing else leaves the app.
   ipcMain.handle('fw:openPage', () => shell.openExternal(FIRMWARE_PAGE));
+
+  // Automatic checks only from a packaged app: a source checkout has no
+  // release of its own to compare with.
+  ipcMain.handle('app:info', () => ({ version: app.getVersion(), packaged: app.isPackaged }));
+  ipcMain.handle('app:checkUpdate', () => checkAppUpdate(app.getVersion()));
+  ipcMain.handle('app:openRelease', (_e, url) => {
+    if (isReleasePage(url)) shell.openExternal(url);
+  });
 
   // `make demo` (or SCOPE_HOST=...) points the app at a scope on launch.
   ipcMain.handle('app:launchHost', () => process.env.SCOPE_HOST || null);

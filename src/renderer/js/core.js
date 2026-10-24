@@ -16,6 +16,7 @@ export const core = {
     live: true,
     measItems: ['FREQuency', 'VPP', 'VMAX', 'VMIN', 'VAVG', 'PDUTy'],
     autoConnect: true,
+    checkUpdates: true,
   },
   busy: 0,
 };
