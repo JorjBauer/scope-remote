@@ -70,6 +70,29 @@ async function connect() {
   }
 }
 
+// Fills in the first scope that answers a VXI-11 broadcast, but leaves the
+// connecting to the user.
+async function find() {
+  const btn = $('find');
+  btn.disabled = true;
+  btn.textContent = '...';
+  try {
+    const found = await window.scope.find();
+    if (found) {
+      $('host').value = found;
+      toast(`Found a scope at ${found}. Press Connect to use it.`, 'ok', 6000);
+    } else {
+      toast('No scope answered on this network. Is it on, and on the same subnet?', 'error', 8000);
+    }
+  } catch (e) {
+    const why = e.message.replace(/^Error invoking remote method '[^']*': (Error: )?/, '');
+    toast(`Could not search the network: ${why}`, 'error', 12000);
+  } finally {
+    btn.textContent = 'Find';
+    btn.disabled = $('host').disabled;
+  }
+}
+
 async function disconnect() {
   core.connected = false;
   await window.scope.disconnect();
@@ -86,11 +109,13 @@ function setConnUi(s) {
     $('idn').textContent = `${parts[1] || 'Scope'}  fw ${parts[3] || '?'}`;
     btn.textContent = 'Disconnect';
     $('host').disabled = true;
+    $('find').disabled = true;
     $('offline').classList.add('hidden');
   } else {
     $('idn').textContent = s === 'connecting' ? 'Connecting...' : 'Not connected';
     btn.textContent = s === 'connecting' ? '...' : 'Connect';
     $('host').disabled = s === 'connecting';
+    $('find').disabled = s === 'connecting';
     if (s === 'down') $('offline').classList.remove('hidden');
   }
 }
@@ -389,6 +414,7 @@ async function main() {
 
   $('connect').addEventListener('click', () => (core.connected ? disconnect() : connect()));
   $('host').addEventListener('keydown', (e) => e.key === 'Enter' && connect());
+  $('find').addEventListener('click', find);
   $('btn-shortcuts').addEventListener('click', toggleDrawer);
   $('btn-shot').addEventListener('click', actions.saveScreenshot);
   $('btn-csv').addEventListener('click', () => actions.exportCsv());

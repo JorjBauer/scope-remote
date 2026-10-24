@@ -9,6 +9,7 @@ const fs = require('fs');
 const { Scpi } = require('./scpi');
 const store = require('./store');
 const { checkFirmware, FIRMWARE_PAGE } = require('./firmware');
+const { findScope } = require('./discover');
 
 const scope = new Scpi();
 let win = null;
@@ -110,6 +111,15 @@ function registerIpc() {
     const idn = await scope.query('*IDN?', { urgent: true });
     store.set('host', host);
     return { idn };
+  });
+
+  // Only ever reports an address; connecting stays the user's call.
+  ipcMain.handle('scope:find', async () => {
+    try {
+      return await findScope();
+    } catch (err) {
+      throw new Error(explainConnectError(err, 'the local network', 111));
+    }
   });
 
   ipcMain.handle('scope:disconnect', () => {

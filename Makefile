@@ -36,7 +36,16 @@ node_modules: package.json
 DEV_APP   := node_modules/electron/dist/Electron.app
 DEV_STAMP := node_modules/.local-network-ok
 
-$(DEV_STAMP): node_modules tools/local-network.plist
+# The electron package fetches its binary in a postinstall script. If that
+# never ran (node_modules copied from another host, npm run with
+# --ignore-scripts, an interrupted install) there is no Electron.app at all.
+# install.js writes path.txt once the binary is in place.
+ELECTRON_BIN := node_modules/electron/path.txt
+
+$(ELECTRON_BIN): node_modules
+	$(NODE) node_modules/electron/install.js
+
+$(DEV_STAMP): $(ELECTRON_BIN) tools/local-network.plist
 	/usr/libexec/PlistBuddy -c 'Delete :NSLocalNetworkUsageDescription' "$(DEV_APP)/Contents/Info.plist" 2>/dev/null || true
 	/usr/libexec/PlistBuddy -c 'Merge tools/local-network.plist' "$(DEV_APP)/Contents/Info.plist"
 	codesign --force --deep --sign - "$(DEV_APP)"

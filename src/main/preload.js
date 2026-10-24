@@ -14,6 +14,7 @@ function on(channel) {
 
 contextBridge.exposeInMainWorld('scope', {
   connect: (host, port) => ipcRenderer.invoke('scope:connect', host, port),
+  find: () => ipcRenderer.invoke('scope:find'),
   disconnect: () => ipcRenderer.invoke('scope:disconnect'),
   status: () => ipcRenderer.invoke('scope:status'),
   run: (cmds, opts) => ipcRenderer.invoke('scope:run', cmds, opts),
